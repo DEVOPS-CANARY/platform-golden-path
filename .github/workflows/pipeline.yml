@@ -66,7 +66,7 @@ on:
       gitops-repo:
         description: GitOps repository (owner/name) that Argo CD watches
         type: string
-        default: DEVOPS-CANARY/GitOps-Repo
+        default: DEVOPS-CANARY/platform-gitops
     secrets:
       GITOPS_DEPLOY_KEY:
         description: SSH deploy key with write access to the GitOps repository (fallback when the App below is not configured)

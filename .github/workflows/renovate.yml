@@ -5,7 +5,7 @@
 # Self-hosted: Renovate runs here on a schedule, authenticated as the
 # platform's GitHub App, and visits the repositories listed in
 # .github/renovate-global.json. Each repository's renovate.json says
-# `extends: ["github>DEVOPS-CANARY/golden-path"]`, which is the shared preset
+# `extends: ["github>DEVOPS-CANARY/platform-golden-path"]`, which is the shared preset
 # default.json in this repo: one place to decide how updates are grouped,
 # scheduled and labelled.
 #

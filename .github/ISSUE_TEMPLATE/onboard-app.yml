@@ -8,7 +8,7 @@ body:
       value: |
         Fill this in for the app you want on the platform. When the platform team adds the
         **approved** label, a workflow renders the templates and opens two pull requests: one
-        in the app's repository (pipeline caller, Dockerfiles) and one in GitOps-Repo (the
+        in the app's repository (pipeline caller, Dockerfiles) and one in platform-gitops (the
         app's UAT environment). Add the **preview** label first to see what would be generated.
         Names and values here are reviewed by people; nothing runs until the PRs are merged.
   - type: input

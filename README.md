@@ -7,9 +7,9 @@ declares what its app needs; this repo does the rest through reviewed pull reque
 |---|---|
 | **Shared pipeline** (`.github/workflows/pipeline.yml`): gates, build, scan, push, deploy, promote | ✅ v1 |
 | **Onboarding**: the "Onboard an app" issue form, Copier templates for the app repo and the GitOps folder, a workflow that opens the PRs | ✅ v1.2 |
-| Per-namespace guardrails (Kyverno): walls, quota, limits, image rule | ✅ in [GitOps-Repo](https://github.com/DEVOPS-CANARY/GitOps-Repo) `platform/policies` |
+| Per-namespace guardrails (Kyverno): walls, quota, limits, image rule | ✅ in [platform-gitops](https://github.com/DEVOPS-CANARY/platform-gitops) `platform/policies` |
 | Bot identity: the `goldenpath-bot` GitHub App (short-lived tokens, no personal tokens) | ✅ onboarding and deploys (deploy keys retired); releases next |
-| **Infrastructure as declarations** (layer 6): an app's PostgreSQL role and database declared in its GitOps values (`database.managed`), created by Crossplane provider-sql in [GitOps-Repo](https://github.com/DEVOPS-CANARY/GitOps-Repo) `platform/crossplane`; no `DATABASE_URL` to seal | ✅ v1.7 (todo) |
+| **Infrastructure as declarations** (layer 6): an app's PostgreSQL role and database declared in its GitOps values (`database.managed`), created by Crossplane provider-sql in [platform-gitops](https://github.com/DEVOPS-CANARY/platform-gitops) `platform/crossplane`; no `DATABASE_URL` to seal | ✅ v1.7 (todo) |
 | **Versioned releases**: Conventional Commits check, release-please release PR, tag → prod, images tagged with the version | ✅ v1.4 |
 | **Automatic updates**: Renovate runs here as the App on weekdays and opens PRs in every listed repo (actions, images, charts, npm); each repo extends the shared preset `default.json` | ✅ v1.5 |
 
@@ -28,7 +28,7 @@ declares what its app needs; this repo does the rest through reviewed pull reque
    - in the app repository: `.github/workflows/pipeline.yml` (the caller), `docker/*.Dockerfile`
      and their `.dockerignore`, `.hadolint.yaml`, and `.golden-path.yml` (the answers, so
      `copier update` can bring template improvements in later as a diff);
-   - in GitOps-Repo: `apps/<app>/values.yaml`, `apps/<app>/envs/uat/values.yaml` (placeholder
+   - in platform-gitops: `apps/<app>/values.yaml`, `apps/<app>/envs/uat/values.yaml` (placeholder
      digests until the first deploy) and `envs/uat/secrets/README.md` with the exact sealing
      commands.
 4. The PR checklists say what is left for people: the environments if no admin App is
@@ -59,8 +59,8 @@ being onboarded. Without it, the app PR asks a repository admin to run
 By hand, without the form (needs [Copier](https://copier.readthedocs.io) 9.18+):
 
 ```sh
-copier copy --trust --data template=app-repo   gh:DEVOPS-CANARY/golden-path ../my-app       # answers asked interactively
-copier copy --trust --data template=gitops-app gh:DEVOPS-CANARY/golden-path ../GitOps-Repo
+copier copy --trust --data template=app-repo   gh:DEVOPS-CANARY/platform-golden-path ../my-app       # answers asked interactively
+copier copy --trust --data template=gitops-app gh:DEVOPS-CANARY/platform-golden-path ../platform-gitops
 copier update --trust      # later, inside ../my-app: template changes since its version, as a diff
 ```
 
@@ -72,8 +72,8 @@ The platform pieces an app relies on, and where they live:
 | Repo | Holds |
 |---|---|
 | **golden-path** (this repo) | How an app is built, checked, deployed and onboarded |
-| [helm-charts](https://github.com/DEVOPS-CANARY/helm-charts) | How an app runs in the cluster (the `rssb-app` chart) |
-| [GitOps-Repo](https://github.com/DEVOPS-CANARY/GitOps-Repo) | What runs where: values per app per environment, sealed secrets |
+| [platform-charts](https://github.com/DEVOPS-CANARY/platform-charts) | How an app runs in the cluster (the `rssb-app` chart) |
+| [platform-gitops](https://github.com/DEVOPS-CANARY/platform-gitops) | What runs where: values per app per environment, sealed secrets |
 | App repos | Code, Dockerfiles, and one short workflow that calls the pipeline |
 
 ## Using the pipeline
@@ -100,7 +100,7 @@ concurrency:
 
 jobs:
   pipeline:
-    uses: DEVOPS-CANARY/golden-path/.github/workflows/pipeline.yml@v1
+    uses: DEVOPS-CANARY/platform-golden-path/.github/workflows/pipeline.yml@v1
     permissions:
       contents: read
       packages: write # push images to GHCR
@@ -129,7 +129,7 @@ on every PR: `fix:` → patch, `feat:` → minor, `feat!:` or a `BREAKING CHANGE
 numbering), add a `Release-As: 1.47.0` footer to a commit on `main`. Nobody types a tag.
 
 Deploys are GitOps commits: the pipeline writes the new image digests into
-`apps/<app>/envs/<env>/values.yaml` in GitOps-Repo, and Argo CD rolls them out. CI never
+`apps/<app>/envs/<env>/values.yaml` in platform-gitops, and Argo CD rolls them out. CI never
 touches the cluster.
 
 ### Inputs
@@ -142,7 +142,7 @@ touches the cluster.
 | `package-manager` | | `npm` | `npm` or `yarn` (installs from the lockfile, exactly) |
 | `checks` | | `format:check lint typecheck test build` | `package.json` scripts run on every component, in order |
 | `dockerfile-dir` | | `docker` | Folder holding `<component>.Dockerfile` |
-| `gitops-repo` | | `DEVOPS-CANARY/GitOps-Repo` | Where deploys are committed |
+| `gitops-repo` | | `DEVOPS-CANARY/platform-gitops` | Where deploys are committed |
 
 Secret `GOLDEN_PATH_APP_KEY`: an org secret, the `goldenpath-bot` App's private key. With the
 org variable `GOLDEN_PATH_APP_ID`, each deploy mints a one-hour token for the GitOps repo and
@@ -156,7 +156,7 @@ as `GITOPS_DEPLOY_KEY`.)
 - `docker/<component>.Dockerfile`, built with the component folder as its context.
 - GitHub Environments `uat` (branch `develop`), `staging` (`staging`, `hotfix/*`) and
   `production` (`main` and tags `v*`, **required reviewer**).
-- In GitOps-Repo: `apps/<app>/values.yaml` and `apps/<app>/envs/<env>/values.yaml` for each
+- In platform-gitops: `apps/<app>/values.yaml` and `apps/<app>/envs/<env>/values.yaml` for each
   environment, using the `rssb-app` chart, with each component's image as
   `repository: ghcr.io/<org>/<app>-<component>` followed by a `digest:` line.
 
