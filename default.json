@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "Shared Renovate preset for the platform and its apps: extends: [\"github>DEVOPS-CANARY/golden-path\"]",
+  "description": "Shared Renovate preset for the platform and its apps: extends: [\"github>DEVOPS-CANARY/platform-golden-path\"]",
   "extends": [
     "config:recommended",
     "helpers:pinGitHubActionDigests",

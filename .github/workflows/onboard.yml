@@ -3,7 +3,7 @@
 #   label "preview"   renders the templates and posts the result on the issue
 #                     (no access to other repos needed)
 #   label "approved"  renders, then opens one PR in the app's repository and
-#                     one in GitOps-Repo, and links them on the issue
+#                     one in platform-gitops, and links them on the issue
 #
 # Only people who can add labels (triage and above) can trigger it, and the
 # PRs are reviewed like any other: nothing runs until they are merged.
@@ -86,7 +86,7 @@ jobs:
 
       # Rendered from this repo's latest release tag on GitHub (Copier's default
       # for a git template), not from the checkout: the rendered repo then
-      # records `_src_path: gh:DEVOPS-CANARY/golden-path` and `_commit: vX.Y.Z`,
+      # records `_src_path: gh:DEVOPS-CANARY/platform-golden-path` and `_commit: vX.Y.Z`,
       # which is what `copier update` needs to move it to a later release.
       - name: Render the templates
         env:
@@ -135,13 +135,13 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: |
             ${{ env.app_repo_name }}
-            GitOps-Repo
+            platform-gitops
 
       # The usual cause: the App is not installed on the app's repository.
       - name: Explain a token failure
         if: env.MODE == 'approved' && steps.app-token.outcome != 'success'
         run: |
-          gh issue comment "$ISSUE" --body "$(printf ':x: Could not get a token for **%s** and **GitOps-Repo**. Usually the GitHub App is not installed on the app repository: in the org settings, GitHub Apps, *goldenpath-bot*, *Configure*, choose **All repositories** (or add the repository), then add the **approved** label again.' "$repository")"
+          gh issue comment "$ISSUE" --body "$(printf ':x: Could not get a token for **%s** and **platform-gitops**. Usually the GitHub App is not installed on the app repository: in the org settings, GitHub Apps, *goldenpath-bot*, *Configure*, choose **All repositories** (or add the repository), then add the **approved** label again.' "$repository")"
           gh issue edit "$ISSUE" --remove-label approved
           exit 1
 
@@ -215,7 +215,7 @@ jobs:
         env:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
-          GITOPS_REPO: ${{ github.repository_owner }}/GitOps-Repo
+          GITOPS_REPO: ${{ github.repository_owner }}/platform-gitops
         run: |
           # Commits are authored by the App's bot user, so history shows what was automated.
           # The app PR's title is also its commit message, which the pipeline's
@@ -271,7 +271,7 @@ jobs:
           open_pr "$GITOPS_REPO" "$OUT/gitops" main "Onboard $app: UAT environment" gitops-pr.md gitops-pr.url 2>&1 | tee -a push.log
           export GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
           # shellcheck disable=SC2016 # backticks in the comment text are Markdown, not shell
-          gh issue comment "$ISSUE" --body "$(printf ':rocket: Pull requests opened for `%s`:\n- app repository: %s\n- GitOps-Repo: %s\n\nMerge the GitOps one first, then the app one.' "$app" "$(cat app-pr.url)" "$(cat gitops-pr.url)")"
+          gh issue comment "$ISSUE" --body "$(printf ':rocket: Pull requests opened for `%s`:\n- app repository: %s\n- platform-gitops: %s\n\nMerge the GitOps one first, then the app one.' "$app" "$(cat app-pr.url)" "$(cat gitops-pr.url)")"
           gh issue edit "$ISSUE" --remove-label approved --add-label "prs-opened"
 
       - name: Report a failure on the issue
