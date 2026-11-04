@@ -5,8 +5,13 @@
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
+{%- if layout == 'root' %}
+  name: {{ app }}-{{ 'backend' if backend != 'not-needed' else 'frontend' }}
+  description: the {{ 'backend' if backend != 'not-needed' else 'frontend' }} of {{ app }} on the platform's golden path
+{%- else %}
   name: {{ app }}
   description: {{ app }} on the platform's golden path
+{%- endif %}
   annotations:
     github.com/project-slug: {{ repository }}
     # The GitOps folder that says what runs where (values, environments, sealed secrets)

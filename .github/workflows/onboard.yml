@@ -2,8 +2,12 @@
 #
 #   label "preview"   renders the templates and posts the result on the issue
 #                     (no access to other repos needed)
-#   label "approved"  renders, then opens one PR in the app's repository and
-#                     one in platform-gitops, and links them on the issue
+#   label "approved"  renders, then opens one PR in each of the app's repositories
+#                     and one in platform-gitops, and links them on the issue
+#
+# An app lives in one repository (folders backend/ and frontend/) or in one repository
+# per component (the code at each repository's root). The form says which; the app-repo
+# template is rendered once per repository, the GitOps folder once for the app.
 #
 # Only people who can add labels (triage and above) can trigger it, and the
 # PRs are reviewed like any other: nothing runs until they are merged.
@@ -12,7 +16,7 @@
 # the org's repos, with Contents and Pull requests read & write. The App ID is
 # the repository variable ONBOARDING_APP_ID, its private key the secret
 # ONBOARDING_APP_KEY; each run mints a token that lives for one hour and only
-# for the two repos it touches. Without the App, "approved" stops with a
+# for the repos it touches. Without the App, "approved" stops with a
 # clear message; "preview" still works.
 name: Onboard an app
 
@@ -54,31 +58,45 @@ jobs:
         run: pip install --quiet --disable-pip-version-check "copier==$COPIER_VERSION"
 
       # The form's answers, validated. An invalid form is reported on the issue.
+      # answers.json holds the whole app (the GitOps render); repos/<name>.json one
+      # file per app repository (the app-repo renders); repos/repos.json lists them.
       - name: Read the form
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
           printf '%s' "$ISSUE_BODY" > issue.md
-          if ! python scripts/onboarding_answers.py issue.md > answers.json 2> error.txt; then
+          if ! python scripts/onboarding_answers.py issue.md --repos repos > answers.json 2> error.txt; then
             # shellcheck disable=SC2016 # backticks in the comment text are Markdown, not shell
             gh issue comment "$ISSUE" --body "$(printf ':x: The form has a problem, please edit it and add the label again:\n\n```\n%s\n```' "$(cat error.txt)")"
             gh issue edit "$ISSUE" --remove-label "$MODE"
             exit 1
           fi
           jq -r 'to_entries[] | "\(.key)=\(.value)"' answers.json | grep -v '^owner=' >> "$GITHUB_ENV"
-          echo "app_repo_name=$(jq -r '.repository | split("/")[1]' answers.json)" >> "$GITHUB_ENV"
+          echo "repo_names=$(jq -r '[.[].name] | join(" ")' repos/repos.json)" >> "$GITHUB_ENV"
+          {
+            echo "app_repo_names<<EOF"
+            jq -r '.[].repository | split("/")[1]' repos/repos.json
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+          jq -r '.[] | "\(.name): \(.repository) (\(.layout))"' repos/repos.json
 
-      # The repository must match the answers (folders, package.json, the chosen
-      # package manager's lockfile), or the first pipeline run fails in three jobs.
-      # Repositories this token cannot read are checked again with the App token.
-      - name: Check the repository against the answers
+      # Each repository must match the answers (component folders or the root,
+      # package.json, the chosen package manager's lockfile), or the first pipeline
+      # run fails in three jobs. Repositories this token cannot read are checked
+      # again with the App token.
+      - name: Check the repositories against the answers
         run: |
-          if ! gh api "repos/$repository" --silent 2>/dev/null; then
-            echo "::notice::$repository is not readable with the workflow token; checked after the App token is minted"
-            exit 0
-          fi
-          if ! scripts/check-app-repo.sh "$repository" answers.json > problems.txt 2>&1; then
-            { printf ':x: **%s** does not match the form, please fix one or the other and add the label again:\n\n' "$repository"; sed 's/^/- /' problems.txt; } > problem.md
+          : > problems.txt
+          for name in $repo_names; do
+            repo=$(jq -r .repository "repos/$name.json")
+            if ! gh api "repos/$repo" --silent 2>/dev/null; then
+              echo "::notice::$repo is not readable with the workflow token; checked after the App token is minted"
+              continue
+            fi
+            scripts/check-app-repo.sh "$repo" "repos/$name.json" >> problems.txt 2>&1 || echo "$repo" >> failed.txt
+          done
+          if [ -s failed.txt ]; then
+            { printf ':x: The repositories do not match the form, please fix one or the other and add the label again:\n\n'; sed 's/^/- /' problems.txt; } > problem.md
             gh issue comment "$ISSUE" --body-file problem.md
             gh issue edit "$ISSUE" --remove-label "$MODE"
             exit 1
@@ -93,10 +111,13 @@ jobs:
           TEMPLATE: gh:${{ github.repository }}
         run: |
           OUT="$RUNNER_TEMP/out"; echo "OUT=$OUT" >> "$GITHUB_ENV"
-          mkdir -p "$OUT/app" "$OUT/gitops"
-          copier copy --defaults --trust --data-file answers.json --data template=app-repo "$TEMPLATE" "$OUT/app"
+          mkdir -p "$OUT/gitops"
+          for name in $repo_names; do
+            mkdir -p "$OUT/$name"
+            copier copy --defaults --trust --data-file "repos/$name.json" --data template=app-repo "$TEMPLATE" "$OUT/$name"
+          done
           copier copy --defaults --trust --data-file answers.json --data template=gitops-app "$TEMPLATE" "$OUT/gitops"
-          grep -hE '^(_src_path|_commit):' "$OUT/app/.golden-path.yml"
+          grep -hE '^(_src_path|_commit):' "$OUT/gitops/apps/$app/.golden-path.yml"
           (cd "$OUT" && find . -type f | sort | sed 's#^\./##') > "$GITHUB_WORKSPACE/files.txt"
           cat files.txt
 
@@ -104,7 +125,10 @@ jobs:
         if: env.MODE == 'preview'
         run: |
           {
-            echo "### Preview for \`$app\` (\`$repository\`)"
+            echo "### Preview for \`$app\`"
+            echo
+            jq -r '.[] | "- `\(.name)`: \(.repository) (\(.layout) layout)"' repos/repos.json
+            echo "- \`gitops\`: platform-gitops"
             echo
             echo "These files would be opened as pull requests when the **approved** label is added:"
             echo
@@ -123,7 +147,7 @@ jobs:
           gh issue edit "$ISSUE" --remove-label approved
           exit 1
 
-      # A token for this run only: one hour, these two repositories.
+      # A token for this run only: one hour, the app's repositories and platform-gitops.
       - name: Mint an App token
         if: env.MODE == 'approved'
         id: app-token
@@ -134,25 +158,30 @@ jobs:
           private-key: ${{ secrets.ONBOARDING_APP_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: |
-            ${{ env.app_repo_name }}
+            ${{ env.app_repo_names }}
             platform-gitops
 
-      # The usual cause: the App is not installed on the app's repository.
+      # The usual cause: the App is not installed on one of the app's repositories.
       - name: Explain a token failure
         if: env.MODE == 'approved' && steps.app-token.outcome != 'success'
         run: |
-          gh issue comment "$ISSUE" --body "$(printf ':x: Could not get a token for **%s** and **platform-gitops**. Usually the GitHub App is not installed on the app repository: in the org settings, GitHub Apps, *goldenpath-bot*, *Configure*, choose **All repositories** (or add the repository), then add the **approved** label again.' "$repository")"
+          gh issue comment "$ISSUE" --body "$(printf ':x: Could not get a token for the app repositories (%s) and **platform-gitops**. Usually the GitHub App is not installed on one of them: in the org settings, GitHub Apps, *goldenpath-bot*, *Configure*, choose **All repositories** (or add the repository), then add the **approved** label again.' "$(jq -r '[.[].repository] | join(", ")' repos/repos.json)")"
           gh issue edit "$ISSUE" --remove-label approved
           exit 1
 
-      - name: Check a private repository against the answers
+      - name: Check private repositories against the answers
         if: env.MODE == 'approved'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          if ! scripts/check-app-repo.sh "$repository" answers.json > problems.txt 2>&1; then
+          : > problems.txt; rm -f failed.txt
+          for name in $repo_names; do
+            repo=$(jq -r .repository "repos/$name.json")
+            scripts/check-app-repo.sh "$repo" "repos/$name.json" >> problems.txt 2>&1 || echo "$repo" >> failed.txt
+          done
+          if [ -s failed.txt ]; then
             export GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
-            { printf ':x: **%s** does not match the form, please fix one or the other and add the label again:\n\n' "$repository"; sed 's/^/- /' problems.txt; } > problem.md
+            { printf ':x: The repositories do not match the form, please fix one or the other and add the label again:\n\n'; sed 's/^/- /' problems.txt; } > problem.md
             gh issue comment "$ISSUE" --body-file problem.md
             gh issue edit "$ISSUE" --remove-label approved
             exit 1
@@ -165,22 +194,25 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          default=$(gh api "repos/$repository" --jq .default_branch)
-          sha=$(gh api "repos/$repository/git/ref/heads/$default" --jq .object.sha)
-          created=""
-          for branch in develop staging main; do
-            if gh api "repos/$repository/git/ref/heads/$branch" --silent 2>/dev/null; then continue; fi
-            gh api -X POST "repos/$repository/git/refs" -f ref="refs/heads/$branch" -f sha="$sha" --silent
-            created="$created $branch"
+          for name in $repo_names; do
+            repo=$(jq -r .repository "repos/$name.json")
+            default=$(gh api "repos/$repo" --jq .default_branch)
+            sha=$(gh api "repos/$repo/git/ref/heads/$default" --jq .object.sha)
+            created=""
+            for branch in develop staging main; do
+              if gh api "repos/$repo/git/ref/heads/$branch" --silent 2>/dev/null; then continue; fi
+              gh api -X POST "repos/$repo/git/refs" -f ref="refs/heads/$branch" -f sha="$sha" --silent
+              created="$created $branch"
+            done
+            created=${created# }
+            echo "${created:-none, all existed}" > "branches-$name.txt"
+            echo "$repo: branches created from $default: ${created:-none, all existed}"
           done
-          created=${created# }
-          echo "branches_created=${created:-none, all existed}" >> "$GITHUB_ENV"
-          echo "Branches created from $default: ${created:-none, all existed}"
 
       # Environments need Administration: write, which the onboarding App does
       # not have on purpose. An optional second App holding only that permission
       # (variable ONBOARDING_ADMIN_APP_ID, secret ONBOARDING_ADMIN_APP_KEY) creates
-      # them with a one-hour token scoped to this one repository. Without it, the
+      # them with a one-hour token scoped to the app's repositories. Without it, the
       # app PR tells a repository admin which script to run.
       - name: Mint an admin token (optional)
         if: env.MODE == 'approved' && vars.ONBOARDING_ADMIN_APP_ID != ''
@@ -191,7 +223,7 @@ jobs:
           app-id: ${{ vars.ONBOARDING_ADMIN_APP_ID }}
           private-key: ${{ secrets.ONBOARDING_ADMIN_APP_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: ${{ env.app_repo_name }}
+          repositories: ${{ env.app_repo_names }}
 
       - name: Create the environments
         if: env.MODE == 'approved'
@@ -199,14 +231,17 @@ jobs:
           ADMIN_TOKEN: ${{ steps.admin-token.outputs.token }}
         run: |
           owner=$(jq -r .owner answers.json)
-          if [ -n "$ADMIN_TOKEN" ]; then
-            GH_TOKEN="$ADMIN_TOKEN" scripts/repo-environments.sh "$repository" "$owner"
-            # shellcheck disable=SC2016 # backticks are Markdown
-            printf -- '- [x] GitHub Environments `uat` (develop), `staging` (staging, hotfix/*), `production` (main, tags v*; reviewer %s): created by the golden path\n' "$owner" > environments.md
-          else
-            # shellcheck disable=SC2016 # backticks are Markdown
-            printf -- '- [ ] GitHub Environments `uat`, `staging`, `production`: a repository admin runs `scripts/repo-environments.sh %s %s` from a golden-path checkout (no admin App is configured, see README)\n' "$repository" "$owner" > environments.md
-          fi
+          for name in $repo_names; do
+            repo=$(jq -r .repository "repos/$name.json")
+            if [ -n "$ADMIN_TOKEN" ]; then
+              GH_TOKEN="$ADMIN_TOKEN" scripts/repo-environments.sh "$repo" "$owner"
+              # shellcheck disable=SC2016 # backticks are Markdown
+              printf -- '- [x] GitHub Environments `uat` (develop), `staging` (staging, hotfix/*), `production` (main, tags v*; reviewer %s): created by the golden path\n' "$owner" > "environments-$name.md"
+            else
+              # shellcheck disable=SC2016 # backticks are Markdown
+              printf -- '- [ ] GitHub Environments `uat`, `staging`, `production`: a repository admin runs `scripts/repo-environments.sh %s %s` from a golden-path checkout (no admin App is configured, see README)\n' "$repo" "$owner" > "environments-$name.md"
+            fi
+          done
 
       # One PR per repository, on branch onboard/golden-path. Files are copied
       # over the checkout, so re-running updates the same branch.
@@ -244,34 +279,42 @@ jobs:
             [ -n "$url" ] || url=$(gh pr create --repo "$repo" --base "$base" --head onboard/golden-path --title "$title" --body-file "$body")
             echo "$url" > "$out"
           }
-          cat > app-pr.md <<EOF
+          : > prs.md
+          for name in $repo_names; do
+            repo=$(jq -r .repository "repos/$name.json")
+            what=$(jq -r '[(if .backend != "not-needed" then "backend" else empty end), (if .frontend != "not-needed" then "frontend" else empty end)] as $c
+              | if .layout == "root" then "the \($c | join(" and ")) of **\(.app)** (code at the root of this repository)" else "**\(.app)**" end' "repos/$name.json")
+            cat > "app-pr-$name.md" <<EOF
           Opened by the golden path from $GITHUB_SERVER_URL/$GH_REPO/issues/$ISSUE.
 
-          Adds the shared pipeline caller and the Dockerfiles for **$app**. Before merging:
-          - [x] Branches \`develop\`, \`staging\`, \`main\` exist (created by the golden path: $branches_created); hotfixes go on \`hotfix/<name>\`
-          $(cat environments.md)
+          Adds the shared pipeline caller and the Dockerfiles for $what. Before merging:
+          - [x] Branches \`develop\`, \`staging\`, \`main\` exist (created by the golden path: $(cat "branches-$name.txt")); hotfixes go on \`hotfix/<name>\`
+          $(cat "environments-$name.md")
           - [ ] Commit messages follow Conventional Commits (feat:, fix:, ...): they decide the version numbers
-          - [ ] Each component folder has the scripts the pipeline runs: \`format:check lint typecheck test build\`
+          - [ ] Each component has the scripts the pipeline runs: \`format:check lint typecheck test build\`
           - [ ] The GitOps PR is merged first (the first deploy needs the environment to exist)
 
           Every PR here then runs the gates; a merge to \`develop\` deploys to UAT.
           EOF
+            open_pr "$repo" "$OUT/$name" develop "ci: add the golden path pipeline and Dockerfiles for $app" "app-pr-$name.md" "app-pr-$name.url" 2>&1 | tee -a push.log
+            echo "- $repo: $(cat "app-pr-$name.url")" >> prs.md
+          done
           cat > gitops-pr.md <<EOF
           Opened by the golden path from $GITHUB_SERVER_URL/$GH_REPO/issues/$ISSUE.
 
           Adds \`apps/$app\` with its UAT environment (rssb-app chart). Image digests are placeholders
           until the app's first deploy from \`develop\` writes the real ones. Before merging:
-          - [ ] Seal the secrets listed in \`apps/$app/envs/uat/secrets/README.md\`
-          - [ ] Lab: add \`$(echo "$app" | tr 'a-z-' 'A-Z_')_UAT_*_PASSWORD\` to team-secrets and run \`scripts/lab-services.sh\`
+          - [ ] Seal the secrets listed in \`apps/$app/envs/uat/secrets/README.md\` (one sealed file per cluster)
+          - [ ] Redis, if used: build cluster \`CLUSTER=rssb-build scripts/seal-build-services.sh $app-uat\`; lab: \`$(echo "$app" | tr 'a-z-' 'A-Z_')_UAT_REDIS_PASSWORD\` in platform-secrets and \`scripts/lab-services.sh\`
           - [ ] Review the shared values (ports, routes, env) with the app's developers
 
           Once merged, Argo CD creates namespace \`$app-uat\` (walled by policy) and waits for the first image.
           EOF
-          open_pr "$repository" "$OUT/app" develop "ci: add the golden path pipeline and Dockerfiles for $app" app-pr.md app-pr.url 2>&1 | tee -a push.log
           open_pr "$GITOPS_REPO" "$OUT/gitops" main "Onboard $app: UAT environment" gitops-pr.md gitops-pr.url 2>&1 | tee -a push.log
+          echo "- platform-gitops: $(cat gitops-pr.url)" >> prs.md
           export GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
           # shellcheck disable=SC2016 # backticks in the comment text are Markdown, not shell
-          gh issue comment "$ISSUE" --body "$(printf ':rocket: Pull requests opened for `%s`:\n- app repository: %s\n- platform-gitops: %s\n\nMerge the GitOps one first, then the app one.' "$app" "$(cat app-pr.url)" "$(cat gitops-pr.url)")"
+          gh issue comment "$ISSUE" --body "$(printf ':rocket: Pull requests opened for `%s`:\n%s\n\nMerge the GitOps one first, then the app ones.' "$app" "$(cat prs.md)")"
           gh issue edit "$ISSUE" --remove-label approved --add-label "prs-opened"
 
       - name: Report a failure on the issue

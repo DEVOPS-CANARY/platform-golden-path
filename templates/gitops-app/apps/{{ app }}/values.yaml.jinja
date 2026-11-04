@@ -1,7 +1,7 @@
 # {{ app }}: what is the same in every environment (rssb-app chart). Each
 # environment's envs/<env>/values.yaml adds only what differs there: the chart
 # version, the host, image digests (written by CI) and per-environment settings.
-# Rendered by the platform's golden path (https://github.com/{{ repository }}).
+# Rendered by the platform's golden path for {% if layout == 'root' %}{{ [backend_repository, frontend_repository] | select | join(' and ') }}{% else %}{{ repository }}{% endif %}.
 
 components:
 {%- if backend != 'not-needed' %}
