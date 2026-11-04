@@ -71,9 +71,9 @@ jobs:
             gh issue edit "$ISSUE" --remove-label "$MODE"
             exit 1
           fi
-          jq -r 'to_entries[] | "\(.key)=\(.value)"' answers.json | grep -v '^owner=' >> "$GITHUB_ENV"
-          echo "repo_names=$(jq -r '[.[].name] | join(" ")' repos/repos.json)" >> "$GITHUB_ENV"
           {
+            jq -r 'to_entries[] | "\(.key)=\(.value)"' answers.json | grep -v '^owner='
+            echo "repo_names=$(jq -r '[.[].name] | join(" ")' repos/repos.json)"
             echo "app_repo_names<<EOF"
             jq -r '.[].repository | split("/")[1]' repos/repos.json
             echo "EOF"
