@@ -8,7 +8,7 @@ declares what its app needs; this repo does the rest through reviewed pull reque
 | **Shared pipeline** (`.github/workflows/pipeline.yml`): gates, build, scan, push, deploy, promote | ✅ v1 |
 | **Onboarding**: the "Onboard an app" issue form, Copier templates for the app repo and the GitOps folder, a workflow that opens the PRs | ✅ v1.2 |
 | Per-namespace guardrails (Kyverno): walls, quota, limits, image rule | ✅ in [platform-gitops](https://github.com/DEVOPS-CANARY/platform-gitops) `platform/policies` |
-| Bot identity: the `goldenpath-bot` GitHub App (short-lived tokens, no personal tokens) | ✅ onboarding and deploys (deploy keys retired); releases next |
+| Bot identity: the `goldenpath-bot` GitHub App (short-lived tokens, no personal tokens) | ✅ onboarding, deploys (deploy keys retired) and this repo's releases |
 | **Infrastructure as declarations** (layer 6): an app's PostgreSQL role and database declared in its GitOps values (`database.managed`), created by Crossplane provider-sql in [platform-gitops](https://github.com/DEVOPS-CANARY/platform-gitops) `platform/crossplane`; no `DATABASE_URL` to seal | ✅ v1.7 (todo) |
 | **Versioned releases**: Conventional Commits check, release-please release PR, tag → prod, images tagged with the version | ✅ v1.4 |
 | **Automatic updates**: Renovate runs here as the App on weekdays and opens PRs in every listed repo (actions, images, charts, npm); each repo extends the shared preset `default.json` | ✅ v1.5 |
@@ -169,11 +169,13 @@ Apps pin a **major** tag: `@v1`. A release is a tag `v1.2.3` plus the moving maj
 working (new inputs get defaults). Anything that would break a caller is a new major, and
 apps move to it with a one-line change in their caller.
 
-To release: merge to `main`, then
-
-```sh
-git tag -a v1.2.3 -m "..." && git tag -f v1 v1.2.3 && git push origin v1.2.3 && git push -f origin v1
-```
+Releasing is automated the same way as the apps (`.github/workflows/release.yml`): every push to
+`main` keeps a **"chore(main): release X.Y.Z" PR** up to date from the commit messages (`fix:`
+patch, `feat:` minor, `feat!:` major; `chore:`, `docs:`, `ci:` no bump). Merging that PR
+creates the tag and the GitHub release, and moves the major tag `v1` to it, so every app's next
+pipeline run uses it. Nobody types a tag. The current version is in
+`.release-please-manifest.json`; commit messages here follow Conventional Commits, or nothing
+is released.
 
 ## Dependency updates (Renovate)
 
