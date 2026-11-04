@@ -1,0 +1,60 @@
+# Releases this repository the way the apps are released. On every push to main,
+# release-please keeps a "chore(main): release X.Y.Z" PR up to date from the commit
+# messages (feat: minor, fix: patch, feat!: major). Merging that PR creates the tag
+# vX.Y.Z and the GitHub release; this workflow then moves the major tag (v1) the apps
+# pin, so a merged fix reaches every app's next run. Before this, releasing was a
+# hand-typed tag, and a merged fix could wait for weeks while every app kept calling
+# the old v1.
+#
+# The PR is opened as the goldenpath-bot App (the onboarding App of this repository),
+# not with the workflow token: a PR opened by the workflow token would not run the
+# checks. Version bookkeeping: release-please-config.json and .release-please-manifest.json.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release PR, tag, major tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint an App token for this repository
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.ONBOARDING_APP_ID }}
+          private-key: ${{ secrets.ONBOARDING_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          target-branch: main
+
+      # Apps call the pipeline at @v1. The tag is moved by the API, no checkout: a
+      # lightweight tag pointing at the release commit, replaced in place.
+      - name: Move the major tag to the release
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SHA: ${{ steps.release.outputs.sha }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+          MAJOR: v${{ steps.release.outputs.major }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$MAJOR" --silent 2>/dev/null; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$MAJOR" -f sha="$SHA" -F force=true --silent
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$MAJOR" -f sha="$SHA" --silent
+          fi
+          echo "$MAJOR -> $TAG ($SHA)"
