@@ -1,0 +1,15 @@
+# CI render test: the frontend's own repository of a split app (code at its root,
+# layout root), Yarn, no backend fields, no service needs.
+app: split
+repository: DEVOPS-CANARY/split-frontend
+layout: root
+backend_repository: DEVOPS-CANARY/split-backend
+frontend_repository: DEVOPS-CANARY/split-frontend
+backend: not-needed
+frontend: nextjs
+worker: ""
+package_manager: yarn
+needs_postgres: false
+needs_redis: false
+needs_kafka: false
+owner: platform-team

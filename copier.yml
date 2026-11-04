@@ -6,6 +6,9 @@
 #   copier update --trust        # later, inside a rendered repo: template changes as a diff
 #
 # One repository, two templates: `template` picks the folder under templates/.
+# An app lives in one repository (layout folders: backend/, frontend/) or in one
+# repository per component (layout root): app-repo is then rendered once per
+# repository with the other component set to not-needed; gitops-app once for the app.
 # A rendered repo keeps its answers (and the template version) in
 # .golden-path.yml, which is what `copier update` reads.
 _min_copier_version: "9.0.0"
@@ -28,12 +31,30 @@ app:
 
 repository:
   type: str
-  help: The app's GitHub repository, owner/name
+  help: This repository, owner/name (the app's only repository, or the component repository being rendered)
   validator: "{% if not repository | regex_search('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') %}owner/name{% endif %}"
+
+layout:
+  type: str
+  help: "folders: backend/ and frontend/ in this repository; root: this repository holds one component at its root"
+  choices: [folders, root]
+  default: folders
+
+backend_repository:
+  type: str
+  help: The backend's own repository, owner/name, when the app is split (empty when it lives in `repository`)
+  default: ""
+  validator: "{% if backend_repository and not backend_repository | regex_search('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') %}owner/name{% endif %}"
+
+frontend_repository:
+  type: str
+  help: The frontend's own repository, owner/name, when the app is split (empty when it lives in `repository`)
+  default: ""
+  validator: "{% if frontend_repository and not frontend_repository | regex_search('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') %}owner/name{% endif %}"
 
 backend:
   type: str
-  help: Backend component (folder backend/)
+  help: Backend component (folder backend/, or the root of its own repository)
   choices: [nestjs, not-needed]
   default: nestjs
 
@@ -52,7 +73,7 @@ backend_orm:
 
 frontend:
   type: str
-  help: Frontend component (folder frontend/)
+  help: Frontend component (folder frontend/, or the root of its own repository)
   choices: [nextjs, not-needed]
   default: nextjs
 
@@ -113,7 +134,7 @@ registry:
 chart_version:
   type: str
   help: rssb-app chart version to pin for UAT
-  default: "0.7.0"
+  default: "0.8.0"
 
 host_domain:
   type: str

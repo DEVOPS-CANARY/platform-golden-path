@@ -1,0 +1,18 @@
+# CI render test: an app split in one repository per component; this is the backend's
+# repository (code at its root, layout root), npm + Prisma, Postgres and Kafka, a worker.
+app: split
+repository: DEVOPS-CANARY/split-backend
+layout: root
+backend_repository: DEVOPS-CANARY/split-backend
+frontend_repository: DEVOPS-CANARY/split-frontend
+backend: nestjs
+backend_port: 3001
+backend_orm: prisma
+frontend: not-needed
+worker: mailer
+worker_command: node dist/mailer.js
+package_manager: npm
+needs_postgres: true
+needs_redis: false
+needs_kafka: true
+owner: platform-team

@@ -100,7 +100,12 @@ jobs:
           python -c "import json; a=json.load(open('/tmp/answers.json')); assert a['app']=='sample' and a['needs_redis'] and not a['needs_kafka'], a"
           sed 's/^sample$/Sample App/' templates/tests/issue-body.md > /tmp/bad.md
           if python scripts/onboarding_answers.py /tmp/bad.md 2>/dev/null; then echo "::error::an invalid app name was accepted"; exit 1; fi
-          echo "parser: valid form accepted, invalid name refused"
+          python scripts/onboarding_answers.py templates/tests/issue-body-split.md --repos /tmp/repos > /tmp/split.json
+          python -c "import json; a=json.load(open('/tmp/split.json')); r=json.load(open('/tmp/repos/repos.json')); assert a['layout']=='root' and [x['name'] for x in r]==['backend','frontend'] and all(x['layout']=='root' for x in r), (a, r)"
+          python -c "import json; f=json.load(open('/tmp/repos/frontend.json')); assert f['backend']=='not-needed' and f['worker']=='' and f['repository']=='DEVOPS-CANARY/split-frontend', f"
+          sed 's#^_No response_$#DEVOPS-CANARY/split#' templates/tests/issue-body-split.md > /tmp/both.md
+          if python scripts/onboarding_answers.py /tmp/both.md 2>/dev/null; then echo "::error::a whole-app repository together with component repositories was accepted"; exit 1; fi
+          echo "parser: valid forms accepted (one repository, one per component), invalid name and mixed repositories refused"
       # GitHub ignores a form it cannot parse and silently shows a blank issue instead.
       - name: The issue form
         run: python scripts/check_issue_form.py .github/ISSUE_TEMPLATE/*.yml

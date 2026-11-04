@@ -7,9 +7,12 @@ body:
     attributes:
       value: |
         Fill this in for the app you want on the platform. When the platform team adds the
-        **approved** label, a workflow renders the templates and opens two pull requests: one
-        in the app's repository (pipeline caller, Dockerfiles) and one in platform-gitops (the
-        app's UAT environment). Add the **preview** label first to see what would be generated.
+        **approved** label, a workflow renders the templates and opens the pull requests: one in
+        each of the app's repositories (pipeline caller, Dockerfiles) and one in platform-gitops
+        (the app's UAT environment). An app lives in one repository (folders `backend/` and
+        `frontend/`) or in one repository per component (the code at each repository's root):
+        fill either the first repository field or the two after it. Add the **preview** label
+        first to see what would be generated.
         Names and values here are reviewed by people; nothing runs until the PRs are merged.
   - type: input
     id: app
@@ -23,15 +26,25 @@ body:
     id: repository
     attributes:
       label: GitHub repository
-      description: owner/name of the app's repository (it must exist; the platform team needs write access to open the PR)
+      description: owner/name of the repository holding the whole app, folders `backend/` and `frontend/` (it must exist; the platform team needs write access to open the PR). Leave empty when each component has its own repository.
       placeholder: DEVOPS-CANARY/smart-logistics-app
-    validations:
-      required: true
+  - type: input
+    id: backend_repository
+    attributes:
+      label: Backend repository
+      description: Only for an app split in one repository per component. owner/name of the backend's repository, its code at the root.
+      placeholder: DEVOPS-CANARY/investment-backend
+  - type: input
+    id: frontend_repository
+    attributes:
+      label: Frontend repository
+      description: Only for an app split in one repository per component. owner/name of the frontend's repository, its code at the root.
+      placeholder: DEVOPS-CANARY/investment-frontend
   - type: dropdown
     id: backend
     attributes:
       label: Backend
-      description: A NestJS service in `backend/` (folder, package.json, scripts `format:check lint typecheck test build`)
+      description: A NestJS service in `backend/`, or at the root of its own repository (package.json, scripts `format:check lint typecheck test build`)
       options: [nestjs, not-needed]
     validations:
       required: true
@@ -50,7 +63,7 @@ body:
     id: frontend
     attributes:
       label: Frontend
-      description: "A Next.js app in `frontend/` with `output: 'standalone'` in its Next config"
+      description: "A Next.js app in `frontend/`, or at the root of its own repository, with `output: 'standalone'` in its Next config"
       options: [nextjs, not-needed]
     validations:
       required: true

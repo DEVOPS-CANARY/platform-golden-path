@@ -15,17 +15,19 @@ declares what its app needs; this repo does the rest through reviewed pull reque
 
 ## Onboarding an app
 
-1. Open an issue from the **Onboard an app** form: app name, repository, components,
-   package manager, what it needs (Postgres, Redis, Kafka), owner, readiness ticks.
+1. Open an issue from the **Onboard an app** form: app name, repository (one for the whole
+   app with folders `backend/` and `frontend/`, or one per component with the code at its
+   root), components, package manager, what it needs (Postgres, Redis, Kafka), owner,
+   readiness ticks.
 2. Add the label **preview**: the workflow checks the repository against the answers
    (component folders, `package.json`, the chosen package manager's lockfile), renders the
    templates and posts every generated file on the issue. Fix the form if needed and preview
    again.
-3. A platform maintainer adds the label **approved**: the workflow prepares the app
+3. A platform maintainer adds the label **approved**: the workflow prepares each app
    repository (branches `develop`, `staging`, `main` if missing; the three GitHub
-   Environments when the admin App below is configured), then opens two pull requests
+   Environments when the admin App below is configured), then opens the pull requests
    and links them on the issue:
-   - in the app repository: `.github/workflows/pipeline.yml` (the caller), `docker/*.Dockerfile`
+   - in each app repository: `.github/workflows/pipeline.yml` (the caller), `docker/*.Dockerfile`
      and their `.dockerignore`, `.hadolint.yaml`, and `.golden-path.yml` (the answers, so
      `copier update` can bring template improvements in later as a diff);
    - in platform-gitops: `apps/<app>/values.yaml`, `apps/<app>/envs/uat/values.yaml` (placeholder
@@ -138,6 +140,7 @@ touches the cluster.
 |---|---|---|---|
 | `app` | yes | | Product name, lowercase: image prefix `ghcr.io/<org>/<app>-<component>`, GitOps folder `apps/<app>` |
 | `components` | yes | | JSON list of components, each a folder with a `package.json` and a `docker/<component>.Dockerfile` |
+| `layout` | | `folders` | `root`: this repository holds exactly one component at its root (an app split in one repository per component; each repository calls the pipeline, deploys write only that component's digest) |
 | `node-version` | | `22` | Node major used for the checks (Dockerfiles pin their own) |
 | `package-manager` | | `npm` | `npm` or `yarn` (installs from the lockfile, exactly) |
 | `checks` | | `format:check lint typecheck test build` | `package.json` scripts run on every component, in order |
@@ -152,8 +155,9 @@ as `GITOPS_DEPLOY_KEY`.)
 ### What the app repo must have
 
 - Branches `develop`, `staging`, `main`; hotfixes on `hotfix/<name>` from `main`.
-- One folder per component with its `package.json`, lockfile and the scripts in `checks`.
-- `docker/<component>.Dockerfile`, built with the component folder as its context.
+- One folder per component with its `package.json`, lockfile and the scripts in `checks`;
+  or, `layout: root`, one component at the repository's root.
+- `docker/<component>.Dockerfile`, built with the component folder (or the root) as its context.
 - GitHub Environments `uat` (branch `develop`), `staging` (`staging`, `hotfix/*`) and
   `production` (`main` and tags `v*`, **required reviewer**).
 - In platform-gitops: `apps/<app>/values.yaml` and `apps/<app>/envs/<env>/values.yaml` for each

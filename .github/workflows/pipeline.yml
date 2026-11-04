@@ -17,8 +17,11 @@
 #   - branches develop, staging, main, hotfix/<name>; commit messages follow
 #     Conventional Commits (feat:, fix:, ...), checked on every PR; that is
 #     what decides the next version number
-#   - one folder per component (backend/, frontend/, ...) with package.json
-#   - docker/<component>.Dockerfile, built with the component folder as context
+#   - one folder per component (backend/, frontend/, ...) with package.json;
+#     or, `layout: root`, one component at the repository's root (an app split
+#     in one repository per component: each calls the pipeline on its own)
+#   - docker/<component>.Dockerfile, built with the component folder (or the
+#     root) as context
 #   - GitHub Environments uat, staging, production (production: main and
 #     tags v*, with a required reviewer)
 #   - a GitOps folder apps/<app>/envs/<env>/values.yaml (rssb-app chart) whose
@@ -47,6 +50,10 @@ on:
         description: 'JSON list of components to test and build, e.g. ["backend", "frontend"]'
         type: string
         required: true
+      layout:
+        description: "folders: each component in its own folder (default); root: this repository holds one component at its root"
+        type: string
+        default: folders
       node-version:
         description: Node major for tests (the Dockerfiles pin their own)
         type: string
@@ -112,6 +119,7 @@ jobs:
       APP: ${{ inputs.app }}
       COMPONENTS: ${{ inputs.components }}
       PACKAGE_MANAGER: ${{ inputs.package-manager }}
+      LAYOUT: ${{ inputs.layout }}
     steps:
       - name: Validate inputs
         run: |
@@ -119,6 +127,10 @@ jobs:
           echo "$COMPONENTS" | jq -e 'type == "array" and length > 0 and all(.[]; test("^[a-z][a-z0-9-]{0,30}$"))' >/dev/null \
             || { echo "::error::components must be a JSON list of lowercase names, got '$COMPONENTS'"; exit 1; }
           [[ "$PACKAGE_MANAGER" =~ ^(npm|yarn)$ ]] || { echo "::error::package-manager must be npm or yarn"; exit 1; }
+          [[ "$LAYOUT" =~ ^(folders|root)$ ]] || { echo "::error::layout must be folders or root, got '$LAYOUT'"; exit 1; }
+          if [ "$LAYOUT" = root ] && [ "$(jq length <<<"$COMPONENTS")" != 1 ]; then
+            echo "::error::layout root means one component at the repository's root; components has $(jq length <<<"$COMPONENTS")"; exit 1
+          fi
 
       - name: Decide
         id: plan
@@ -257,7 +269,7 @@ jobs:
         component: ${{ fromJSON(inputs.components) }}
     defaults:
       run:
-        working-directory: ${{ matrix.component }}
+        working-directory: ${{ inputs.layout == 'root' && '.' || matrix.component }}
     env:
       PM: ${{ inputs.package-manager }}
       CHECKS: ${{ inputs.checks }}
@@ -269,7 +281,7 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           cache: ${{ inputs.package-manager }}
-          cache-dependency-path: ${{ matrix.component }}/${{ inputs.package-manager == 'yarn' && 'yarn.lock' || 'package-lock.json' }}
+          cache-dependency-path: ${{ format('{0}{1}', inputs.layout == 'root' && './' || format('{0}/', matrix.component), inputs.package-manager == 'yarn' && 'yarn.lock' || 'package-lock.json') }}
       - name: Install (from the lockfile, exactly)
         run: |
           if [ "$PM" = yarn ]; then
@@ -328,7 +340,7 @@ jobs:
       - name: Build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: ${{ matrix.component }}
+          context: ${{ inputs.layout == 'root' && '.' || matrix.component }}
           file: ${{ inputs.dockerfile-dir }}/${{ matrix.component }}.Dockerfile
           load: true # into the local daemon so it can be scanned before any push
           push: false

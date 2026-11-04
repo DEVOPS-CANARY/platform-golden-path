@@ -6,7 +6,7 @@ chart:
 
 global:
   host: uat.{{ app }}.{{ host_domain }}
-  imagePullSecrets: [ghcr-pull] # sealed in secrets/ (see secrets/README.md)
+  imagePullSecrets: [ghcr-pull] # only needed for private images (see secrets/README.md); harmless otherwise
 
 components:
 {%- if backend != 'not-needed' %}

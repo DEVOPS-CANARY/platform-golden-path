@@ -27,6 +27,9 @@ jobs:
     with:
       app: {{ app }}
       components: '[{% set parts = [] %}{% if backend != 'not-needed' %}{% set _ = parts.append('"backend"') %}{% endif %}{% if frontend != 'not-needed' %}{% set _ = parts.append('"frontend"') %}{% endif %}{{ parts | join(', ') }}]'
+{%- if layout == 'root' %}
+      layout: root # this repository holds one component at its root
+{%- endif %}
 {%- if package_manager != 'npm' %}
       package-manager: {{ package_manager }}
 {%- endif %}
