@@ -304,7 +304,8 @@ jobs:
           Opened by the golden path from $GITHUB_SERVER_URL/$GH_REPO/issues/$ISSUE.
 
           Adds \`apps/$app\` with its UAT environment (rssb-app chart). Image digests are placeholders
-          until the app's first deploy from \`develop\` writes the real ones. Before merging:
+          until the app's first deploy from \`develop\` writes the real ones; until then the app is
+          declared, not deployed (namespace, config, secrets and database, no pods). Before merging:
           - [ ] Seal the secrets listed in \`apps/$app/envs/uat/secrets/README.md\` (one sealed file per cluster)
           - [ ] Redis, if used: build cluster \`CLUSTER=rssb-build scripts/seal-build-services.sh $app-uat\`; lab: \`$(echo "$app" | tr 'a-z-' 'A-Z_')_UAT_REDIS_PASSWORD\` in platform-secrets and \`scripts/lab-services.sh\`
           - [ ] Review the shared values (ports, routes, env) with the app's developers

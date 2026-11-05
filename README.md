@@ -36,7 +36,9 @@ declares what its app needs; this repo does the rest through reviewed pull reque
 4. The PR checklists say what is left for people: the environments if no admin App is
    configured (one script run by a repository admin), sealed secrets, database/Redis/Kafka
    credentials. Merge the GitOps PR first, then the app PR; the first merge to `develop`
-   deploys to UAT.
+   deploys to UAT. Until that first deploy the environment holds placeholder digests, and the
+   chart deploys nothing for such a component (namespace, config, secrets and database only),
+   so nothing fails while waiting.
 
 What the templates produce is what logistics runs today: the same pipeline caller, the
 same Dockerfile structure (multi-stage, pinned base by digest, non-root, no package
