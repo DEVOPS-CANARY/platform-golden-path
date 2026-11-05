@@ -291,6 +291,7 @@ jobs:
           - [x] Branches \`develop\`, \`staging\`, \`main\` exist (created by the golden path: $(cat "branches-$name.txt")); hotfixes go on \`hotfix/<name>\`
           $(cat "environments-$name.md")
           - [ ] Commit messages follow Conventional Commits (feat:, fix:, ...): they decide the version numbers
+          - [ ] Repository visibility: on GitHub's free organization plan, a private repository gets neither the organization's secrets and variables (the deploy then cannot write to GitOps) nor the production environment's reviewer rule; make it public, or use a plan without that limit
           - [ ] Each component has the scripts the pipeline runs: \`format:check lint typecheck test build\`
           - [ ] The GitOps PR is merged first (the first deploy needs the environment to exist)
 
