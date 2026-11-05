@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.9.1](https://github.com/DEVOPS-CANARY/platform-golden-path/compare/v1.9.0...v1.9.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* new apps pin rssb-app 0.9.0 (placeholder image = declared, not deployed) ([97b3757](https://github.com/DEVOPS-CANARY/platform-golden-path/commit/97b3757df11a6c6121b3c6ceabf9fe4695778c0c))
+* new apps pin rssb-app 0.9.0; the GitOps PR says the app is declared, not deployed, until its first image ([f54158c](https://github.com/DEVOPS-CANARY/platform-golden-path/commit/f54158c9a2dc7735b4a56f1d8b40434c5b801693))
+
 ## [1.9.0](https://github.com/DEVOPS-CANARY/platform-golden-path/compare/v1.8.1...v1.9.0) (2026-11-04)
 
 
